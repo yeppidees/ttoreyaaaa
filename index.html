@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DOTTORRE: 우당탕탕 실험실 ^^</title>
+    <style>
+        :root {
+            --bg: #020502;
+            --terminal: #2ecc71;
+            --dim: #1a432e;
+            --danger: #ff3333;
+            --text: #a8d5ba;
+            --dead: #333d36;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { 
+            background: var(--bg); color: var(--text); 
+            font-family: 'Courier New', monospace; margin: 0; padding: 0;
+            display: flex; justify-content: center; height: 100vh;
+        }
+
+        .app {
+            width: 100%; max-width: 700px; display: flex; flex-direction: column;
+            border-left: 1px solid var(--dim); border-right: 1px solid var(--dim);
+            background: linear-gradient(180deg, #050a05 0%, #020502 100%);
+        }
+
+        header { padding: 15px; border-bottom: 2px solid var(--terminal); background: #000; text-align: center; }
+        .stats { display: flex; justify-content: space-around; font-size: 0.85em; color: var(--terminal); margin-top: 5px; font-weight: bold; }
+
+        /* Tabs */
+        nav { display: flex; background: #000; border-bottom: 1px solid var(--dim); }
+        .tab-btn { flex: 1; padding: 15px; border: none; background: none; color: var(--dim); cursor: pointer; font-family: inherit; font-weight: bold; }
+        .tab-btn.active { color: var(--terminal); border-bottom: 2px solid var(--terminal); background: rgba(46, 204, 113, 0.1); }
+
+        /* Content Areas */
+        main { flex: 1; overflow-y: auto; padding: 15px; position: relative; }
+        .view { display: none; }
+        .view.active { display: block; }
+
+        /* Specimen Card */
+        .card { 
+            border: 1px solid var(--dim); background: rgba(0, 15, 0, 0.6); 
+            padding: 15px; margin-bottom: 12px; border-radius: 4px;
+            transition: 0.3s;
+        }
+        .card.dead { filter: grayscale(1); opacity: 0.4; border-color: var(--dead); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .card-name { font-weight: bold; font-size: 1.1em; color: var(--terminal); text-shadow: 0 0 5px var(--terminal); }
+
+        /* Gauges */
+        .stat-row { font-size: 0.75em; margin: 5px 0; }
+        .bar-bg { height: 6px; background: #111; margin-top: 3px; border-radius: 3px; overflow: hidden; }
+        .bar-fill { height: 100%; transition: width 0.4s; background: var(--terminal); }
+
+        /* Controls */
+        .controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 15px; background: #000; border-top: 1px solid var(--dim); }
+        button { 
+            background: #000; color: var(--terminal); border: 1px solid var(--terminal);
+            padding: 12px; cursor: pointer; font-family: inherit; font-size: 0.8em; transition: 0.2s;
+        }
+        button:hover { background: var(--dim); color: #fff; }
+        button:active { transform: scale(0.98); }
+        .btn-auto.on { background: var(--danger); border-color: #fff; color: #fff; animation: blink 1.5s infinite; }
+
+        /* Modal */
+        .modal { 
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.9); z-index: 100; justify-content: center; align-items: center; 
+        }
+        .modal-content { background: var(--bg); border: 1px solid var(--terminal); padding: 25px; width: 90%; max-width: 450px; }
+        input, select { width: 100%; padding: 12px; margin: 10px 0; background: #000; border: 1px solid var(--dim); color: var(--terminal); font-family: inherit; }
+
+        /* Logs */
+        .log-entry { font-size: 0.85em; margin-bottom: 8px; border-left: 2px solid var(--dim); padding-left: 8px; line-height: 1.5; }
+        .l-death { color: var(--danger); border-left-color: var(--danger); font-weight: bold; }
+        .l-msg { color: #fff; font-style: italic; font-size: 0.9em; }
+
+        @keyframes blink { 0% {opacity: 1} 50% {opacity: 0.6} 100% {opacity: 1} }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <header>
+        <div style="letter-spacing: 5px; font-weight: bold; font-size: 1.2em;">DOTTORRE: SEGMENT_LAB</div>
+        <div class="stats">
+            <span>CYCLE: <span id="turn-txt">0</span></span>
+            <span>ALIVE: <span id="count-txt">0</span></span>
+        </div>
+    </header>
+
+    <nav>
+        <button class="tab-btn active" onclick="showTab('lab')">배양실</button>
+        <button class="tab-btn" onclick="showTab('rel')">관계도</button>
+        <button class="tab-btn" onclick="showTab('log')">관찰일지</button>
+    </nav>
+
+    <main id="view-lab" class="view active"><div id="specimen-list"></div></main>
+    <main id="view-rel" class="view"><div id="relation-list"></div></main>
+    <main id="view-log" class="view"><div id="log-list"></div></main>
+
+    <div class="controls">
+        <button onclick="addSpecimen()">시료 추출 (+)</button>
+        <button onclick="nextTurn()">실험 강행 (Step)</button>
+        <button id="auto-btn" onclick="toggleAuto()">자동 실험 OFF</button>
+        <button onclick="resetLab()" style="color:var(--danger); border-color:var(--danger);">실험 초기화</button>
+        <button onclick="saveChar()">개체 데이터 저장</button>
+        <button onclick="saveProgress()">진행 상태 저장</button>
+    </div>
+</div>
+
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <h3 style="margin:0; font-size:1em;">SPECIMEN CONFIGURATION</h3>
+        <input type="text" id="m-name" placeholder="개체명 입력">
+        <div style="font-size:0.7em; margin-top:10px;">수동 관계 설정 (대상 선택 후 수치 입력):</div>
+        <select id="m-rel-target"></select>
+        <input type="number" id="m-rel-val" placeholder="적대치 (음수일수록 증오)">
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button style="flex:1" onclick="applyEdit()">동기화</button>
+            <button style="flex:1; border-color:#444;" onclick="closeModal()">취소</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- SFX (Web Audio) ---
+    const audio = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(f, d, t='square') {
+        const o = audio.createOscillator(); const g = audio.createGain();
+        o.type = t; o.frequency.value = f; g.gain.value = 0.03;
+        o.connect(g); g.connect(audio.destination);
+        o.start(); o.stop(audio.currentTime + d);
+    }
+
+    // --- Data ---
+    const TRAITS = [
+        { n: "가학적", d: "고통은 가장 순수한 데이터지." },
+        { n: "허무적", n2: "어차피 우린 모두 지나가는 조각일 뿐이다." },
+        { n: "편집증", d: "누군가 내 연구를 훔쳐보고 있어..." },
+        { n: "우월주의", d: "내가 원본에 가장 가깝다는 걸 증명하겠어." },
+        { n: "냉소적", d: "이런 실험이 무슨 의미가 있다고." }
+    ];
+    const DEATHS = [
+        "세포 안정성 임계값 돌파. 액체 상태로 붕괴되었습니다.",
+        "자아 충돌로 인한 뇌 신경계 소실.",
+        "타 조각에게 실험 도구로 사용된 후 폐기되었습니다.",
+        "스스로를 해부하여 존재 증명을 시도하다 정지했습니다.",
+        "원본의 의지가 개입하여 존재가 말소되었습니다."
+    ];
+    const EVENTS = [
+        { n: "중추신경 과부하", s: -20, o: 15, m: "아아... 이 고통조차 전율이 느껴지는군!" },
+        { n: "강제 장기 기증", s: -15, r: -40, m: "네 장기가 내 연구에 더 도움이 될 것 같다." },
+        { n: "안구 동기화", s: -25, o: 10, m: "우린 하나이면서도... 서로의 죽음을 지켜보는구나." }
+    ];
+
+    let state = {
+        turn: parseInt(localStorage.getItem('dt_turn_f')) || 0,
+        specimens: JSON.parse(localStorage.getItem('dt_chars_f')) || [],
+        auto: false,
+        timer: null,
+        editId: null
+    };
+
+    // --- Core ---
+    function showTab(t) {
+        playSound(400, 0.05);
+        document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`view-${t}`).classList.add('active');
+        event.target.classList.add('active');
+        render();
+    }
+
+    function addSpecimen() {
+        playSound(800, 0.1);
+        const tr = TRAITS[Math.floor(Math.random()*TRAITS.length)];
+        state.specimens.push({
+            id: Date.now(),
+            name: `도토레_${Math.floor(Math.random()*9000+1000)}`,
+            trait: tr.n,
+            quote: tr.d,
+            stability: 100,
+            obsession: 40 + Math.floor(Math.random()*30),
+            active: true,
+            relations: {}
+        });
+        addLog(`[발생] 새로운 조각이 분리되어 배양을 시작합니다.`, 'terminal');
+        render();
+    }
+
+    function deleteSpecimen(id) {
+        if(confirm("이 시료를 실험실에서 완전히 삭제합니까? (영구 말소)")) {
+            state.specimens = state.specimens.filter(s => s.id !== id);
+            render();
+        }
+    }
+
+    function nextTurn() {
+        const alive = state.specimens.filter(s => s.active);
+        if(alive.length === 0) { toggleAuto(false); return; }
+
+        state.turn++;
+        playSound(200, 0.05);
+
+        alive.forEach(s => {
+            s.stability -= 3;
+            if(Math.random() > 0.65) {
+                const ev = EVENTS[Math.floor(Math.random()*EVENTS.length)];
+                s.stability += ev.s; s.obsession += (ev.o || 0);
+                addLog(`[${s.name}] ${ev.n}`);
+                addLog(`ㄴ <span class="l-msg">"${ev.m}"</span>`);
+                
+                if(ev.r && alive.length > 1) {
+                    const victim = alive.filter(o => o.id !== s.id)[0];
+                    s.relations[victim.id] = (s.relations[victim.id] || 0) + ev.r;
+                }
+            }
+
+            // Tournament Aggression
+            if(s.obsession > 85 && alive.length > 1) {
+                const target = alive.find(a => a.id !== s.id);
+                target.stability -= 20;
+                addLog(`[충돌] ${s.name}이(가) ${target.name}에게 치명적인 실험을 가합니다!`, 'l-death');
+            }
+
+            if(s.stability <= 0) {
+                s.stability = 0; s.active = false;
+                addLog(`[사망] ${s.name}: ${DEATHS[Math.floor(Math.random()*DEATHS.length)]}`, 'l-death');
+                playSound(100, 0.4, 'sawtooth');
+            }
+        });
+
+        // Winner Check
+        const final = state.specimens.filter(s => s.active);
+        if(final.length === 1 && state.specimens.length > 1) {
+            addLog(`[종료] 최후의 생존자 '${final[0].name}'가 오리지널 도토레로 확정되었습니다.`, 'terminal');
+            toggleAuto(false);
+        }
+        render();
+    }
+
+    function toggleAuto() {
+        state.auto = !state.auto;
+        const btn = document.getElementById('auto-btn');
+        if(state.auto) {
+            btn.classList.add('on'); btn.innerText = "자동 진행 ON";
+            state.timer = setInterval(nextTurn, 1000);
+        } else {
+            btn.classList.remove('on'); btn.innerText = "자동 진행 OFF";
+            clearInterval(state.timer);
+        }
+    }
+
+    // --- Modal ---
+    function openModal(id) {
+        state.editId = id;
+        const s = state.specimens.find(x => x.id === id);
+        document.getElementById('m-name').value = s.name;
+        const sel = document.getElementById('m-rel-target');
+        sel.innerHTML = '<option value="">대상 선택</option>';
+        state.specimens.filter(x => x.active && x.id !== id).forEach(x => {
+            sel.innerHTML += `<option value="${x.id}">${x.name}</option>`;
+        });
+        document.getElementById('modal').style.display = 'flex';
+    }
+    function applyEdit() {
+        const s = state.specimens.find(x => x.id === state.editId);
+        s.name = document.getElementById('m-name').value;
+        const tid = document.getElementById('m-rel-target').value;
+        const rVal = parseInt(document.getElementById('m-rel-val').value);
+        if(tid && !isNaN(rVal)) s.relations[tid] = rVal;
+        closeModal(); render();
+    }
+    function closeModal() { document.getElementById('modal').style.display = 'none'; }
+
+    // --- Persistence ---
+    function saveChar() { localStorage.setItem('dt_chars_f', JSON.stringify(state.specimens)); addLog("개체 유전자 데이터가 보존되었습니다."); }
+    function saveProgress() { localStorage.setItem('dt_turn_f', state.turn); addLog("실험 주기(Cycle)가 기록되었습니다."); }
+    function resetLab() { if(confirm("모든 실험 데이터를 소각하고 초기화합니까?")) { localStorage.clear(); location.reload(); } }
+
+    function addLog(msg, cl='') {
+        const area = document.getElementById('log-list');
+        const div = document.createElement('div');
+        div.className = `log-entry ${cl}`;
+        div.innerHTML = `> CYC_${state.turn}: ${msg}`;
+        area.prepend(div);
+    }
+
+    function render() {
+        document.getElementById('turn-txt').innerText = state.turn;
+        document.getElementById('count-txt').innerText = state.specimens.filter(s => s.active).length;
+
+        const specList = document.getElementById('specimen-list');
+        specList.innerHTML = '';
+        state.specimens.forEach(s => {
+            const card = document.createElement('div');
+            card.className = `card ${s.active ? '' : 'dead'}`;
+            card.innerHTML = `
+                <div class="card-header">
+                    <span class="card-name">${s.name}</span>
+                    <div style="display:flex; gap:5px;">
+                        <button onclick="openModal(${s.id})" style="padding:2px 8px; font-size:0.65em;">설정</button>
+                        <button onclick="deleteSpecimen(${s.id})" style="padding:2px 8px; font-size:0.65em; border-color:var(--danger); color:var(--danger)">삭제</button>
+                    </div>
+                </div>
+                <div style="font-size:0.7em; margin-bottom:8px; opacity:0.8;">성향: ${s.trait} | ${s.active ? '배양 중' : '기능 정지'}</div>
+                <div class="stat-row">안정도 ${s.stability}% <div class="bar-bg"><div class="bar-fill" style="width:${s.stability}%; background:var(--danger)"></div></div></div>
+                <div class="stat-row">집착도 ${s.obsession}% <div class="bar-bg"><div class="bar-fill" style="width:${s.obsession}%"></div></div></div>
+            `;
+            specList.appendChild(card);
+        });
+
+        const relList = document.getElementById('relation-list');
+        relList.innerHTML = '';
+        state.specimens.filter(s => s.active).forEach(s => {
+            const box = document.createElement('div');
+            box.style.marginBottom = "20px";
+            box.innerHTML = `<div style="color:var(--terminal); border-bottom:1px solid var(--dim); font-size:0.9em; padding-bottom:5px;">${s.name}의 인식 회로</div>`;
+            Object.keys(s.relations).forEach(tid => {
+                const t = state.specimens.find(x => x.id == tid);
+                if(t) box.innerHTML += `<div style="font-size:0.8em; margin:5px 0 0 10px;">- ${t.name}: 적대 수치 ${s.relations[tid]}</div>`;
+            });
+            relList.appendChild(box);
+        });
+    }
+
+    render();
+</script>
+</body>
+</html>
